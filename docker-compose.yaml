@@ -1,0 +1,191 @@
+version: "3.8"
+
+networks:
+  kong-net:
+
+services:
+  kong-database:
+    image: postgres:13
+    networks:
+      - kong-net
+    environment:
+      - POSTGRES_USER=kong
+      - POSTGRES_DB=kong
+      - POSTGRES_PASSWORD=kongpass
+    ports:
+      - 5432:5432
+
+#  redis-cluster-node-1:
+#    image: redis:latest
+#    command: redis-server /usr/local/etc/redis/redis.conf
+#    networks:
+#      - kong-net
+#    ports:
+#      - "9079:6379"
+#    volumes:
+#      - ./redis-conf-folder:/usr/local/etc/redis
+#
+#  redis-cluster-node-2:
+#    image: redis:latest
+#    command: redis-server /usr/local/etc/redis/redis.conf
+#    networks:
+#      - kong-net
+#    ports:
+#      - "9080:6379"
+#    volumes:
+#      - ./redis-conf-folder:/usr/local/etc/redis
+#
+#  redis-cluster-node-3:
+#    image: redis:latest
+#    command: redis-server /usr/local/etc/redis/redis.conf
+#    networks:
+#      - kong-net
+#    ports:
+#      - "9081:6379"
+#    volumes:
+#      - ./redis-conf-folder:/usr/local/etc/redis
+#
+#  redis-cluster-node-4:
+#    image: redis:latest
+#    command: redis-server /usr/local/etc/redis/redis.conf
+#    networks:
+#      - kong-net
+#    ports:
+#      - "9082:6379"
+#    volumes:
+#      - ./redis-conf-folder:/usr/local/etc/redis
+#
+#  redis-cluster-node-5:
+#    image: redis:latest
+#    command: redis-server /usr/local/etc/redis/redis.conf
+#    networks:
+#      - kong-net
+#    ports:
+#      - "9083:6379"
+#    volumes:
+#      - ./redis-conf-folder:/usr/local/etc/redis
+#
+#  redis-cluster-node-6:
+#    image: redis:latest
+#    command: redis-server /usr/local/etc/redis/redis.conf
+#    networks:
+#      - kong-net
+#    ports:
+#      - "9084:6379"
+#    volumes:
+#      - ./redis-conf-folder:/usr/local/etc/redis
+
+  redis:
+    image: redis:latest
+    networks:
+      - kong-net
+    ports:
+      - "6379:6379"
+#    command: /usr/local/etc/redis/redis-cluster-create.sh
+#    depends_on:
+#      - redis-cluster-node-2
+#      - redis-cluster-node-1
+#      - redis-cluster-node-3
+#      - redis-cluster-node-4
+#      - redis-cluster-node-5
+#      - redis-cluster-node-6
+#    volumes:
+#      - ./redis-conf-folder:/usr/local/etc/redis
+
+  #  redis:
+#    image: redis:latest
+#    restart: always
+#    networks:
+#      - kong-net
+#    ports:
+#      - "6379:6379"
+#    volumes:
+#      - /path/to/local/dаta:/root/redis
+#      - /path/to/local/redis.conf:/usr/local/etc/redis/redis.conf
+#    command:
+#      --bind 0.0.0.0
+#      --port 6379
+#      --tcp-keepalive 300
+#      --databases 16
+#      --loglevel notice
+#      --logfile ""
+#      --stop-writes-on-bgsave-error yes
+#      --rdbcompression yes
+#      --rdbchecksum yes
+#      --dbfilename dump.rdb
+#      --dir ./
+#      --daemonize no
+#      --pidfile /var/run/redis_6379.pid
+
+#  redis-cluster:
+#    image: grokzen/redis-cluster:6.2.1
+#    networks:
+#      - kong-net
+#    ports:
+#    - "7000-7005:7000-7005"
+#    command: redis-server --cluster-enabled yes --cluster-config-file nodes.conf --cluster-node-timeout 5000 --appendonly yes
+#    volumes:
+#      - ./redis-cluster:/data
+
+  kong-migrations:
+    image: kong:3.5.0
+    networks:
+      - kong-net
+    depends_on:
+      - kong-database
+    environment:
+      - KONG_DATABASE=postgres
+      - KONG_PG_HOST=kong-database
+      - KONG_PG_PASSWORD=kongpass
+    command: ["kong", "migrations", "bootstrap"]
+
+  kong-gateway:
+    build: .
+    image: kong:3.5.0
+    restart: always
+    networks:
+      - kong-net
+    depends_on:
+      - kong-database
+      - redis
+    environment:
+      - KONG_DATABASE=postgres
+      - KONG_PG_HOST=kong-database
+      - KONG_PG_USER=kong
+      - KONG_PG_PASSWORD=kongpass
+#      - REDIS_HOST=redis-cluster
+#      - REDIS_PORT=7000
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+#      - REDIS_DATABASES=0
+      - KONG_LOG_LEVEL=debug
+      - KONG_PROXY_ACCESS_LOG=/dev/stdout
+      - KONG_ADMIN_ACCESS_LOG=/dev/stdout
+      - KONG_PROXY_ERROR_LOG=/dev/stderr
+      - KONG_ADMIN_ERROR_LOG=/dev/stderr
+      - KONG_ADMIN_LISTEN=0.0.0.0:8001,0.0.0.0:8444 ssl
+      - KONG_ADMIN_GUI_URL=http://localhost:8002
+      - KONG_PLUGINS=bundled,demo-plugin,jwt-auth
+      - KONG_PLUGINSERVER_NAMES=PY
+      - KONG_PLUGINSERVER_PY_SOCKET=/usr/local/kong/python_pluginserver.sock
+      - KONG_PLUGINSERVER_PY_START_CMD=/opt/kong-python-pdk/kong-pluginserver --no-lua-style --plugins-directory /opt/conf/kong-py-plugins
+      - KONG_PLUGINSERVER_PY_QUERY_CMD=/opt/kong-python-pdk/kong-pluginserver --no-lua-style --plugins-directory /opt/conf/kong-py-plugins --dump-all-plugins
+#      - KONG_PLUGINSERVER_PY1_SOCKET=/usr/local/kong/python_pluginserver1.sock
+#      - KONG_PLUGINSERVER_PY1_START_CMD=/opt/kong-python-pdk/kong-pluginserver --no-lua-style --plugins-directory /opt/conf/jwt-demo
+#      - KONG_PLUGINSERVER_PY1_QUERY_CMD=/opt/kong-python-pdk/kong-pluginserver --no-lua-style --plugins-directory /opt/conf/jwt-demo --dump-all-plugins
+#      - KONG_PLUGINSERVER_PY_START_CMD=/opt/kong-python-pdk/demo-plugin.py
+#      - KONG_PLUGINSERVER_PY_QUERY_CMD=/opt/kong-python-pdk/demo-plugin.py --dump
+#      - KONG_PLUGINS=bundled,demo-plugin
+    volumes:
+      - ./kong-py-plugins:/opt/conf/kong-py-plugins
+    ports:
+      - "8000:8000"
+      - "8443:8443"
+      - "8001:8001"
+      - "8002:8002"
+      - "8444:8444"
+    healthcheck:
+      test: ["CMD", "kong-gateway", "health"]
+      interval: 1s
+      timeout: 10s
+      retries: 3
